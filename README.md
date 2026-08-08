@@ -1,16 +1,35 @@
+<div align="center">
+
 # modelgeometry
 
-`modelgeometry` is an architecture-agnostic toolkit for inspecting the
-internal geometric and statistical structure of trained PyTorch
-transformers: weight-space geometry, attention geometry, and curvature
-(Fisher / K-FAC). It works on any `nn.Module` with standard attention
-layers — GPT-style decoder-only models, encoder models, vision transformers,
-and arbitrary custom architectures — through a single adapter abstraction,
+**Architecture-agnostic inspection of weight-space geometry, attention geometry, and curvature (Fisher / K-FAC) for trained PyTorch transformers.**
+
+[![PyPI version](https://img.shields.io/pypi/v/modelgeometry.svg)](https://pypi.org/project/modelgeometry/)
+[![Python versions](https://img.shields.io/pypi/pyversions/modelgeometry.svg)](https://pypi.org/project/modelgeometry/)
+[![CI](https://github.com/Siddhesh290307/modelgeometry/actions/workflows/ci.yml/badge.svg)](https://github.com/Siddhesh290307/modelgeometry/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+</div>
+
+`modelgeometry` works on any `nn.Module` with standard attention layers —
+GPT-style decoder-only models, encoder models, vision transformers, and
+arbitrary custom architectures — through a single adapter abstraction,
 rather than hardcoding any one model family's attribute names.
 
 Every metric implements a named, independently published technique (cited in
 its docstring). The library ships primitives, not composite indices: you
 combine them into whatever question you're actually asking.
+
+## Contents
+
+- [Install](#install)
+- [How it works](#how-it-works)
+- [What's in the box](#whats-in-the-box)
+- [Which metric for which question](#which-metric-for-which-question)
+- [Runnable examples](#runnable-examples)
+- [Reference](#reference)
+- [Development](#development)
+- [License](#license)
 
 ## Install
 
@@ -19,13 +38,22 @@ pip install modelgeometry          # core: weight-space + attention geometry, Fi
 pip install modelgeometry[report]  # + matplotlib-based plotting helpers
 ```
 
-## Why an adapter?
+## How it works
 
 Every function that touches a model's parameters goes through a
 `ModelAdapter`, which resolves attention blocks and Q/K/V projections across
 naming conventions — fused (`c_attn`, `qkv`) and separate
-(`q_proj`/`k_proj`/`v_proj`, `query`/`key`/`value`) alike — instead of
-assuming any single model's layout:
+(`q_proj`/`k_proj`/`v_proj`, `query`/`key`/`value`) alike:
+
+```mermaid
+flowchart LR
+    M["Your PyTorch model<br/>(GPT-2 · LLaMA · BERT · ViT · custom)"] --> A["ModelAdapter"]
+    A --> L["linalg / attention<br/>weight + activation geometry"]
+    A --> F["fisher / kfac / curvature"]
+    F --> R["regularizers<br/>EWC · SI · K-FAC"]
+    L --> T["tracking<br/>GeometryTracker · compare_checkpoints"]
+    F --> T
+```
 
 ```python
 from modelgeometry import resolve_adapter
@@ -105,20 +133,12 @@ compare_checkpoints(model_a, model_b, metrics=[...])  # generic diff report; you
 
 ## Which metric for which question
 
-- **Pruning-candidate detection** — low `attention_entropy` or low
-  `attention_effective_rank` on a head across many batches suggests it
-  attends narrowly and may be prunable (Michel et al., 2019; Voita et al.,
-  2019).
-- **Pretrained-vs-finetuned comparison** — `compare_checkpoints` with
-  `effective_rank`, `row_cosine_similarity`, or `distributional_distance` on
-  corresponding weight matrices, to see what shifted during finetuning.
-- **Training-health monitoring** — a `GeometryTracker` logging
-  `effective_rank` or `fisher_layer_summary` per epoch to watch for rank
-  collapse or curvature blowing up.
-- **Architecture sanity-checking** — running the same `ModelAdapter`-based
-  metrics across two different architectures (or two initialization seeds)
-  to confirm they're in a comparable regime before drawing conclusions from
-  either.
+| Question | Reach for |
+|---|---|
+| Which attention heads are pruning candidates? | Low `attention_entropy` or low `attention_effective_rank` on a head across many batches (Michel et al., 2019; Voita et al., 2019) |
+| What actually shifted during finetuning? | `compare_checkpoints` with `effective_rank`, `row_cosine_similarity`, or `distributional_distance` on corresponding weight matrices |
+| Is training healthy right now? | A `GeometryTracker` logging `effective_rank` or `fisher_layer_summary` per epoch, watching for rank collapse or curvature blowing up |
+| Are two architectures / seeds in a comparable regime? | The same `ModelAdapter`-based metrics run across both, before drawing conclusions from either |
 
 These are illustrative starting points, not a fixed taxonomy — every
 function returns plain Python/numpy/dict data, so it composes into whatever
@@ -126,9 +146,14 @@ analysis you're actually running.
 
 ## Runnable examples
 
-See [`examples/`](examples/): `pruning_candidates.py`,
-`pretrained_vs_finetuned.py`, and `training_health_monitor.py`, each
-self-contained against a small HF model (no external dataset required).
+See [`examples/`](examples/):
+
+- [`pruning_candidates.py`](examples/pruning_candidates.py)
+- [`pretrained_vs_finetuned.py`](examples/pretrained_vs_finetuned.py)
+- [`training_health_monitor.py`](examples/training_health_monitor.py)
+
+Each is self-contained against a small HF model — no external dataset
+required.
 
 ## Reference
 
@@ -157,4 +182,4 @@ detail silently assumes one architecture's conventions.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
