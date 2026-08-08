@@ -1,0 +1,27 @@
+name: Publish to PyPI
+
+# Scaffold only: builds and uploads on a version tag push, but requires a
+# PYPI_API_TOKEN repository secret that must be configured manually in
+# GitHub repo settings before this workflow can actually publish anything.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: pip install build twine
+      - name: Build sdist and wheel
+        run: python -m build
+      - name: Upload to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
