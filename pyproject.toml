@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "modelgeometry"
-version = "0.1.0"
+version = "0.1.1"
 description = "Architecture-agnostic inspection of weight-space geometry, attention geometry, and curvature (Fisher / K-FAC) for trained PyTorch models."
 readme = "README.md"
 license = "MIT"
