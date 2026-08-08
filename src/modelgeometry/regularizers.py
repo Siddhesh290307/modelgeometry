@@ -13,6 +13,8 @@ from typing import Dict
 import torch
 from torch import Tensor, nn
 
+from modelgeometry.kfac import orient_delta
+
 
 def _zero_scalar(model: nn.Module) -> Tensor:
     """A 0-valued scalar tensor on the model's device/dtype.
@@ -125,8 +127,11 @@ class KFACPenalty:
     """Kronecker-factored curvature penalty (Martens & Grosse, 2015).
 
     ``0.5 * weight * sum_layer tr(G @ (W - W_anchor) @ A @ (W - W_anchor)^T)``
-    using K-FAC factors (e.g. from `kfac.kfac_factors`). Layers whose anchor
-    is missing, or whose parameter shape doesn't match its ``A``/``G``
+    using K-FAC factors (e.g. from `kfac.kfac_factors`). Accepts the
+    parameter's weight in either the ``nn.Linear`` ``(out, in)`` orientation
+    or its transpose (e.g. HuggingFace's GPT-2 ``Conv1D``, which stores
+    ``(in, out)`` — see `kfac.orient_delta`). Layers whose anchor is missing,
+    or whose parameter shape is genuinely incompatible with its ``A``/``G``
     factors (e.g. a bias-homogenized ``A`` with no corresponding augmented
     anchor), are skipped rather than guessed at.
     """
@@ -151,8 +156,8 @@ class KFACPenalty:
                 continue
             p = params[name]
             a, g = factors["A"], factors["G"]
-            if p.shape != (g.shape[0], a.shape[0]):
+            delta = orient_delta(p - self.anchor_params[name], a, g)
+            if delta is None:
                 continue
-            delta = p - self.anchor_params[name]
             total = total + torch.trace(g @ delta @ a @ delta.T)
         return 0.5 * self.weight * total

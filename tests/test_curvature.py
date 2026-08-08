@@ -116,21 +116,25 @@ def test_curvature_prediction_check_restores_original_parameters(toy_fused_model
         torch.testing.assert_close(p, original[name])
 
 
-def test_curvature_prediction_check_with_block_factors_is_nonnegative(toy_fused_model, toy_token_batch):
-    toy_fused_model.eval()
-    adapter = resolve_adapter(toy_fused_model)
+@pytest.mark.parametrize("model_fixture", ["toy_fused_model", "tiny_gpt2"])
+def test_curvature_prediction_check_with_block_factors_is_positive(model_fixture, request, toy_token_batch):
+    # tiny_gpt2's fused projection is a Conv1D storing weight as (in, out) —
+    # the transpose of nn.Linear's (out, in). This regression-tests the
+    # block prediction actually engaging (not silently skipping every layer
+    # and returning a phantom 0.0) regardless of that storage orientation.
+    model = request.getfixturevalue(model_fixture)
+    model.eval()
+    adapter = resolve_adapter(model)
     dataloader = [(toy_token_batch, toy_token_batch)]
-    fisher = diagonal_fisher(toy_fused_model, dataloader, n_samples=2, loss_fn=_loss_fn)
-    block_factors = kfac_factors(toy_fused_model, dataloader, n_samples=2, loss_fn=_loss_fn, include_bias=False)
+    fisher = diagonal_fisher(model, dataloader, n_samples=2, loss_fn=_loss_fn)
+    block_factors = kfac_factors(model, dataloader, n_samples=2, loss_fn=_loss_fn, include_bias=False)
 
-    qkv_weight_name = next(
-        name for name, _ in toy_fused_model.named_parameters() if name == "transformer.h.0.attn.c_attn.weight"
-    )
+    qkv_weight_name = next(name for name, _ in model.named_parameters() if name == "transformer.h.0.attn.c_attn.weight")
     delta_shape = adapter.qkv_modules(0)["qkv"].weight.shape
     perturbations = {qkv_weight_name: 1e-3 * torch.randn(*delta_shape)}
 
     result = curvature_prediction_check(
-        toy_fused_model,
+        model,
         loss_fn=_loss_fn,
         batch=(toy_token_batch, toy_token_batch),
         perturbations=perturbations,
@@ -138,4 +142,6 @@ def test_curvature_prediction_check_with_block_factors_is_nonnegative(toy_fused_
         block_factors=block_factors,
     )
     assert "predicted_change_block" in result
-    assert result["predicted_change_block"] >= -1e-8
+    # Strictly positive, not just non-negative: a silently-skipped layer
+    # (the bug this test guards against) would produce exactly 0.0.
+    assert result["predicted_change_block"] > 1e-10

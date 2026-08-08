@@ -32,6 +32,30 @@ from modelgeometry.hooks import HookRegistry
 LossFn = Callable[..., Tensor]
 
 
+def orient_delta(delta: Tensor, a: Tensor, g: Tensor) -> Optional[Tensor]:
+    """Reshape ``delta`` to the ``(out_features, in_features)`` orientation implied by ``a``/``g``.
+
+    `kfac_factors` derives ``A``/``G`` from a module's actual runtime
+    activation/gradient tensor shapes, which is invariant to how that
+    module happens to store its weight parameter. Most modules (``nn.Linear``)
+    store it as ``(out_features, in_features)``, but some (e.g. HuggingFace's
+    GPT-2 ``Conv1D``) store the transpose, ``(in_features, out_features)``.
+    Anything applying a K-FAC quadratic form to a raw parameter delta needs
+    this reconciliation rather than assuming one fixed storage convention.
+
+    Returns the delta reoriented to ``(out_features, in_features)``, or
+    ``None`` if ``delta`` is 2-D but compatible with neither orientation
+    (e.g. a bias-homogenized ``A`` with no correspondingly augmented delta).
+    """
+    if delta.dim() != 2:
+        return None
+    if delta.shape == (g.shape[0], a.shape[0]):
+        return delta
+    if delta.shape == (a.shape[0], g.shape[0]):
+        return delta.T
+    return None
+
+
 def kfac_factors(
     model: nn.Module,
     dataloader: Iterable[Tuple[Tensor, Tensor]],

@@ -113,7 +113,7 @@ def test_synaptic_intelligence_omega_accumulates_after_training():
 # ---- KFACPenalty ---------------------------------------------------------------
 
 
-@pytest.mark.parametrize("model_fixture", ["toy_fused_model", "toy_split_model"])
+@pytest.mark.parametrize("model_fixture", ["toy_fused_model", "toy_split_model", "tiny_gpt2"])
 def test_kfac_penalty_zero_at_anchor_and_positive_after_drift(model_fixture, request):
     model = request.getfixturevalue(model_fixture)
     model.eval()

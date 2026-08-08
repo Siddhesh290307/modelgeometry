@@ -12,6 +12,8 @@ from typing import Callable, Dict, Optional, Tuple
 import torch
 from torch import Tensor, nn
 
+from modelgeometry.kfac import orient_delta
+
 LossFn = Callable[..., Tensor]
 
 
@@ -47,9 +49,11 @@ def curvature_prediction_check(
             Kronecker-factored block quadratic-form prediction
             ``0.5 * tr(G @ dW @ A @ dW^T)`` for every perturbation whose
             tensor is 2-D and shape-compatible with its ``A``/``G`` factors
-            (``dW.shape == (G.shape[0], A.shape[0])``); incompatible entries
-            are skipped, since the caller may homogenize `A` for bias terms
-            that a given perturbation doesn't cover.
+            in either the ``nn.Linear`` ``(out, in)`` orientation or its
+            transpose (e.g. HuggingFace's GPT-2 ``Conv1D``, which stores
+            ``(in, out)`` — see `kfac.orient_delta`); genuinely incompatible
+            entries are skipped, since the caller may homogenize ``A`` for
+            bias terms that a given perturbation doesn't cover.
 
     Returns:
         Dict with ``baseline_loss``, ``perturbed_loss``, ``actual_change``,
@@ -72,12 +76,13 @@ def curvature_prediction_check(
         predicted_block = 0.0
         for name, delta in perturbations.items():
             factors = block_factors.get(name)
-            if factors is None or delta.dim() != 2:
+            if factors is None:
                 continue
             a, g = factors["A"], factors["G"]
-            if delta.shape != (g.shape[0], a.shape[0]):
+            dw = orient_delta(delta, a, g)
+            if dw is None:
                 continue
-            predicted_block += 0.5 * float(torch.trace(g @ delta @ a @ delta.T))
+            predicted_block += 0.5 * float(torch.trace(g @ dw @ a @ dw.T))
 
     originals = {}
     with torch.no_grad():
