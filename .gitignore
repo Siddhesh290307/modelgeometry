@@ -8,3 +8,7 @@ dist/
 venv/
 .coverage
 htmlcov/
+
+# Figures/archives produced by running examples/colab_demo.ipynb locally
+*.png
+modelgeometry_demo_figures.zip
